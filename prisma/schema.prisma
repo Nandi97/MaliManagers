@@ -1,0 +1,321 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model Account {
+    id                String  @id @default(cuid())
+    userId            String  @map("user_id")
+    type              String
+    provider          String
+    providerAccountId String  @map("provider_account_id")
+    refresh_token     String? @db.Text
+    access_token      String? @db.Text
+    expires_at        Int?
+    token_type        String?
+    scope             String?
+    id_token          String? @db.Text
+    session_state     String?
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([provider, providerAccountId])
+    @@map("accounts")
+}
+
+model Session {
+    id           String   @id @default(cuid())
+    sessionToken String   @unique @map("session_token")
+    userId       String   @map("user_id")
+    expires      DateTime
+    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@map("sessions")
+}
+
+model User {
+    id            String    @id @default(cuid())
+    name          String?
+    email         String?   @unique
+    emailVerified DateTime? @map("email_verified")
+    image         String?
+    accounts      Account[]
+    sessions      Session[]
+
+    @@map("users")
+}
+
+model VerificationToken {
+    identifier String
+    token      String
+    expires    DateTime
+
+    @@unique([identifier, token])
+    @@map("verificationtokens")
+}
+
+model NavItem {
+    id          String   @id @default(cuid())
+    title       String   @unique
+    href        String? // Optional field
+    disabled    Boolean? @default(false)
+    external    Boolean? @default(false)
+    icon        String? // Optional field
+    label       String?
+    description String? // Optional field
+    listOrder   Int
+
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    items NavSubItem[] @relation("ParentItem")
+
+    @@map("navItems")
+}
+
+model NavSubItem {
+    id          String   @id @default(cuid())
+    title       String   @unique
+    href        String? // Optional field
+    disabled    Boolean? @default(false)
+    external    Boolean? @default(false)
+    icon        String? // Optional field
+    label       String?
+    description String? // Optional field
+    listOrder   Int
+
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    navItem  NavItem? @relation("ParentItem", fields: [parentId], references: [id])
+    parentId String? // Foreign key for nesting
+
+    @@map("navSubItems")
+}
+
+model Personnel {
+    id         String     @id @default(cuid())
+    name       String
+    email      String     @unique
+    password   String
+    role       Role       @relation(fields: [roleId], references: [id]) // Role: OWNER, CARETAKER, PROPERTY_MANAGER, TENANT
+    properties Property[] @relation("PropertyOwner")
+    tenants    Tenant[]   @relation("UserTenant")
+
+    deletedAt DateTime?
+    createdAt DateTime?  @default(now())
+    updatedAt DateTime?  @updatedAt
+    roleId    String
+    caretaker Property[] @relation("PropertyCaretaker")
+    Reminder  Reminder[]
+
+    @@map("personnel")
+}
+
+model Role {
+    id   String @id @default(cuid())
+    name String
+
+    personnel Personnel[]
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    @@map("roles")
+}
+
+model Property {
+    id          String  @id @default(cuid())
+    name        String
+    address     String
+    ownerId     String
+    caretakerId String?
+
+    units     Unit[]
+    utilities Utility[]
+
+    caretaker Personnel? @relation("PropertyCaretaker", fields: [caretakerId], references: [id])
+    owner     Personnel  @relation("PropertyOwner", fields: [ownerId], references: [id])
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    @@map("properties")
+}
+
+model Unit {
+    id         String   @id @default(cuid())
+    name       String
+    propertyId String
+    property   Property @relation(fields: [propertyId], references: [id])
+
+    tenants         Tenant[]
+    leaseAgreements LeaseAgreement[]
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    @@map("units")
+}
+
+model Tenant {
+    id     String @id @default(cuid())
+    userId String
+    unitId String
+
+    unit Unit      @relation(fields: [unitId], references: [id])
+    user Personnel @relation("UserTenant", fields: [userId], references: [id])
+
+    leaseAgreements LeaseAgreement[]
+    bills           Bill[]
+
+    deletedAt     DateTime?
+    createdAt     DateTime?       @default(now())
+    updatedAt     DateTime?       @updatedAt
+    ServiceCharge ServiceCharge[]
+
+    @@map("tenants")
+}
+
+model LeaseAgreement {
+    id         String    @id @default(cuid())
+    tenantId   String
+    unitId     String
+    startDate  DateTime
+    endDate    DateTime?
+    rentAmount Float
+    isActive   Boolean   @default(true)
+
+    unit   Unit   @relation(fields: [unitId], references: [id])
+    tenant Tenant @relation(fields: [tenantId], references: [id])
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    @@map("leaseAgreements")
+}
+
+model Utility {
+    id         String @id @default(cuid())
+    name       String
+    propertyId String
+
+    property Property @relation(fields: [propertyId], references: [id])
+
+    readings UtilityReading[]
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    @@map("utilities")
+}
+
+model UtilityReading {
+    id          String   @id @default(cuid())
+    utilityId   String
+    readingDate DateTime
+    value       Float
+
+    utility Utility @relation(fields: [utilityId], references: [id])
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    @@map("utilityReadings")
+}
+
+model Bill {
+    id          String    @id @default(cuid())
+    tenantId    String
+    tenant      Tenant    @relation(fields: [tenantId], references: [id])
+    amount      Float
+    dueDate     DateTime
+    isPaid      Boolean   @default(false)
+    paymentDate DateTime?
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+    Payment   Payment[]
+
+    @@map("bill")
+}
+
+model Payment {
+    id            String   @id @default(cuid())
+    billId        String
+    amount        Float
+    paymentDate   DateTime
+    receiptNumber String
+
+    bill Bill @relation(fields: [billId], references: [id])
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    @@map("payments")
+}
+
+model Reminder {
+    id           String   @id @default(cuid())
+    personnelId  String
+    message      String
+    scheduledFor DateTime
+    isSent       Boolean  @default(false)
+
+    personnel Personnel @relation(fields: [personnelId], references: [id])
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    @@map("reminders")
+}
+
+model ServiceCharge {
+    id          String    @id @default(uuid())
+    tenantId    String
+    amount      Float // Enum: MONTHLY, QUARTERLY, ANNUALLY
+    isPaid      Boolean   @default(false)
+    paymentDate DateTime?
+
+    tenant       Tenant       @relation(fields: [tenantId], references: [id])
+    billingCycle BillingCycle @relation(fields: [billingCycleId], references: [id])
+
+    deletedAt      DateTime?
+    createdAt      DateTime? @default(now())
+    updatedAt      DateTime? @updatedAt
+    billingCycleId String
+
+    @@map("serviceCharges")
+}
+
+model BillingCycle {
+    id   String @id @default(cuid())
+    name String
+
+    serviceCharge ServiceCharge[]
+
+    deletedAt DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+
+    @@map("billingCycles")
+}
